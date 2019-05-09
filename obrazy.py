@@ -513,8 +513,8 @@ if __name__ == '__main__':
     """print(directories[-1:])
     clf = get_clf()"""
     cv2.namedWindow('image', cv2.WINDOW_NORMAL)
-    print("\nsimple\n")
-    for directory in directories[2:]:
+    """print("\nsimple\n")
+    for directory in directories[]:
         files = os.listdir(directory)
         try:
             os.makedirs("errors/" + directory)
@@ -526,7 +526,7 @@ if __name__ == '__main__':
         #errors.close()
         for file in files:
             print(file)
-            simple_detection(directory, file)
+            simple_detection(directory, file)"""
     """
     #todo przeliczyć dla 11
     print("\nai\n")
