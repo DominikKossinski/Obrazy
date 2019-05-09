@@ -2,14 +2,14 @@ import sys
 import threading
 import time
 
-import obrazy
 import numpy as np
-from cv2 import cv2
-from matplotlib import image as Image
-from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QHBoxLayout, QVBoxLayout, QPushButton, QFileDialog
+from cv2 import cv2
 from skimage import morphology
+
+import obrazy
 
 
 class App(QWidget):
@@ -17,10 +17,13 @@ class App(QWidget):
     label_width = 300
     text_area_width = 700
     img_size = 400
+    size = 10
+    begin = True
 
-    def __init__(self):
+    def __init__(self, classifier):
         super().__init__()
         self.title = "DnoOka"
+        self.clf = classifier
         self.width = 1600
         self.height = 900
         self.img_size = 450
@@ -56,7 +59,7 @@ class App(QWidget):
         self.buttons_widget = QWidget()
         self.buttons_layout = QVBoxLayout()
 
-        # todo dorobić width
+        # todo setup width
         self.select_button = QPushButton("Wybierz obraz")
         self.select_button.setFont(App.font)
         self.select_button.clicked.connect(self.change_img)
@@ -72,7 +75,7 @@ class App(QWidget):
         self.knn_class_button.clicked.connect(self.start_knn)
         self.buttons_layout.addWidget(self.knn_class_button)
 
-        self.ai_class_button = QPushButton("Kalsyfikator AI")
+        self.ai_class_button = QPushButton("Klasyfikator AI")
         self.ai_class_button.setFont(App.font)
         self.ai_class_button.clicked.connect(self.start_ai)
         self.buttons_layout.addWidget(self.ai_class_button)
@@ -98,6 +101,16 @@ class App(QWidget):
         self.acc_label.setFont(App.font)
         self.errors_layout.addWidget(self.acc_label)
 
+        self.sens_label = QLabel("Sens: ")
+        self.sens_label.setFont(App.font)
+        self.errors_layout.addWidget(self.sens_label)
+
+        self.spec_label = QLabel("Spec: ")
+        self.spec_label.setFont(App.font)
+        self.errors_layout.addWidget(self.spec_label)
+
+        self.errors_labels = [self.acc_label, self.sens_label, self.spec_label]
+
         self.errors_widget.setLayout(self.errors_layout)
 
         self.second_layout.addWidget(self.errors_widget)
@@ -107,7 +120,7 @@ class App(QWidget):
 
         self.parent_widget.setLayout(self.parent_layout)
 
-        self.initUi()
+        self.init_ui()
 
     def change_img(self):
         self.path = QFileDialog.getOpenFileName(self, 'Open File')[0]
@@ -117,33 +130,43 @@ class App(QWidget):
         self.path = self.path[self.path.rindex("/") + 1:]
 
     def start_simple_detection(self):
-        self.result_img.set_img(np.zeros((self.img_size, self.img_size, 3)))
-        self.error_img.set_img(np.zeros((self.img_size, self.img_size, 3)))
-        self.thread = threading.Thread(
+        self.reset_gui()
+        thread = threading.Thread(
             target=simple_detection,
-            args=(self.path, self.name, self.result_img, self.error_img, self.percent_labels,)
+            args=(self.path, self.name, self.result_img, self.error_img, self.percent_labels, self.errors_labels,)
         )
-        self.thread.start()
+        thread.start()
 
     def start_knn(self):
-        self.result_img.set_img(np.zeros((self.img_size, self.img_size, 3)))
-        self.error_img.set_img(np.zeros((self.img_size, self.img_size, 3)))
-        self.thread = threading.Thread(
+        self.reset_gui()
+        thread = threading.Thread(
             target=knn,
-            args=(self.path, self.name, self.n, self.k, self.result_img, self.error_img, self.percent_labels,)
+            args=(self.path, self.name, self.n, self.k, self.result_img, self.error_img, self.percent_labels,
+                  self.errors_labels,)
         )
-        self.thread.start()
+        thread.start()
 
     def start_ai(self):
+        self.reset_gui()
         self.result_img.set_img(np.zeros((self.img_size, self.img_size, 3)))
         self.error_img.set_img(np.zeros((self.img_size, self.img_size, 3)))
-        self.thread = threading.Thread(
+        thread = threading.Thread(
             target=start_ai,
-            args=(self.path, self.name, self.result_img, self.error_img, self.percent_labels,)
+            args=(
+                self.path, self.name, self.result_img, self.error_img, self.percent_labels, self.errors_labels,
+                self.clf, self.begin,)
         )
-        self.thread.start()
+        thread.start()
 
-    def initUi(self):
+    def reset_gui(self):
+        self.result_img.set_img(np.zeros((self.img_size, self.img_size, 3)))
+        self.error_img.set_img(np.zeros((self.img_size, self.img_size, 3)))
+        for label in self.percent_labels:
+            label.setText("")
+        for label in self.errors_labels:
+            label.setText("")
+
+    def init_ui(self):
         self.setWindowTitle(self.title)
         self.setGeometry(self.left, self.top, self.width, self.height)
         self.show()
@@ -171,24 +194,21 @@ class MyImage(QWidget):
 
         self.setLayout(self.layout)
 
-    def setText(self, text):
-        self.textLabel.setText(text)
-
     def set_image(self, path, resize=True):
-        pixMap = QPixmap(path)
+        pix_map = QPixmap(path)
         if resize:
-            pixMap = pixMap.scaled(self.img_size, self.img_size, Qt.KeepAspectRatio)
-        self.pixMapLabel.setPixmap(pixMap)
+            pix_map = pix_map.scaled(self.img_size, self.img_size, Qt.KeepAspectRatio)
+        self.pixMapLabel.setPixmap(pix_map)
 
     def set_img(self, im, resize=True, name="none"):
         cv2.imwrite(name + ".png", im)
-        pixMap = QPixmap(name + ".png")
+        pix_map = QPixmap(name + ".png")
         if resize:
-            pixMap = pixMap.scaled(self.img_size, self.img_size, Qt.KeepAspectRatio)
-        self.pixMapLabel.setPixmap(pixMap)
+            pix_map = pix_map.scaled(self.img_size, self.img_size, Qt.KeepAspectRatio)
+        self.pixMapLabel.setPixmap(pix_map)
 
 
-def simple_detection(path, name, result_image, error_image, percent_labels):
+def simple_detection(path, name, result_image, error_image, percent_labels, errors_labels):
     picture = cv2.imread(path + "/" + name, 0)
     kernel = np.ones((5, 5), np.uint8)
     a = picture
@@ -201,10 +221,9 @@ def simple_detection(path, name, result_image, error_image, percent_labels):
     a = opening = cv2.morphologyEx(a, cv2.MORPH_OPEN, kernel)
     print("Opening")
     result_image.set_img(a)
-
     for i in range(1):
         a = morphology.erosion(a)
-        print("Erossion" + str(i))
+        print("Erosion" + str(i))
         result_image.set_img(a)
 
     thresh = cv2.adaptiveThreshold(a, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 75, 8)
@@ -213,7 +232,7 @@ def simple_detection(path, name, result_image, error_image, percent_labels):
 
     for i in range(2):
         thresh = morphology.erosion(thresh)
-        print("Erossion" + str(i))
+        print("Erosion" + str(i))
         result_image.set_img(thresh)
 
     for i in range(1):
@@ -225,39 +244,42 @@ def simple_detection(path, name, result_image, error_image, percent_labels):
     print("bitwise_not")
     result_image.set_img(thresh)
     image, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    contoursTab = []
-    minArea = 100
+    contours_tab = []
+    min_area = 100
     contours = sorted(contours, key=obrazy.area)
     print("Contours count: ", len(contours))
     for contour in contours:
-        # todo zmiana pola powierzchni na miare koloru
-        leftmost = tuple(contour[contour[:, :, 0].argmin()][0])
-        rightmost = tuple(contour[contour[:, :, 0].argmax()][0])
-        topmost = tuple(contour[contour[:, :, 1].argmin()][0])
-        botmost = tuple(contour[contour[:, :, 1].argmax()][0])
-        if cv2.contourArea(
-                contour) > minArea and picture[leftmost[1]][leftmost[0]].any() > 0 and picture[rightmost[1]][
-            rightmost[0]].any() > 0 and picture[topmost[1]][topmost[0]].any() > 0 and picture[botmost[1]][
-            botmost[0]].any() > 0:
-            contoursTab.append(contour)
-        else:
-            if cv2.contourArea(contour) > minArea:
-                print("L ", picture[leftmost[1]][leftmost[0]])
-                print("R ", picture[rightmost[1]][rightmost[0]])
+        left_most = tuple(contour[contour[:, :, 0].argmin()][0])
+        right_most = tuple(contour[contour[:, :, 0].argmax()][0])
+        top_most = tuple(contour[contour[:, :, 1].argmin()][0])
+        bottom_most = tuple(contour[contour[:, :, 1].argmax()][0])
+        if cv2.contourArea(contour) > min_area and picture[left_most[1]][left_most[0]].any() > 0 and \
+                picture[right_most[1]][right_most[0]].any() > 0 and picture[top_most[1]][top_most[0]].any() > 0 and \
+                picture[bottom_most[1]][bottom_most[0]].any() > 0:
+            contours_tab.append(contour)
 
-    print("Contours count: ", len(contoursTab))
-    cv2.drawContours(opening, contoursTab, -1, (255, 255, 255), 3)
+    print("Contours count: ", len(contours_tab))
     bitmap = np.zeros((len(opening), len(opening[0]), 3))
-    cv2.drawContours(bitmap, contoursTab, -1, (255, 255, 255), -1)
+    cv2.drawContours(bitmap, contours_tab, -1, (255, 255, 255), -1)
     result_image.set_img(bitmap)
-    checkImg(path, name[:name.index(".")], error_image, percent_labels[1], bitmap)
+    check_img(path, name[:name.index(".")], error_image, percent_labels[1], errors_labels, bitmap)
 
 
-def knn(path, name, n, k, result_image, error_image, percent_labels, size=5):
+def knn(path, name, n, k, result_image, error_image, percent_labels, errors_labels, size=5, begin=True):
     start_time = time.time()
-    img = cv2.imread(path + "/" + name)
-    mapa = np.zeros((len(img), len(img[0]), 3))
-    dane = obrazy.loadData(path, "_h", n)
+    kernel = np.ones((5, 5), np.uint8)
+    if begin:
+        img = cv2.imread(path + "/" + name, 0)
+    else:
+        img = cv2.imread(path + "/" + name)
+    if begin:
+        a = img
+        clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(8, 8))
+        for _ in range(2):
+            a = clahe.apply(a)
+        img = cv2.morphologyEx(a, cv2.MORPH_OPEN, kernel)
+    bit_map = np.zeros((len(img), len(img[0]), 3))
+    dane = obrazy.get_data(n, True)
     for i in range(0, len(img), size):
         for j in range(0, len(img[0]), size):
             if j % 1000 == 0:
@@ -266,6 +288,7 @@ def knn(path, name, n, k, result_image, error_image, percent_labels, size=5):
             if i % 100 == 0 and j % 1000 == 0:
                 print(i, " ", j)
                 if j % 3000 == 0:
+                    result_image.set_img(bit_map)
                     elapsed_time = time.time() - start_time
                     print(time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
             if i + size < len(img) and j + size < len(img[0]):
@@ -284,24 +307,20 @@ def knn(path, name, n, k, result_image, error_image, percent_labels, size=5):
                 # print("Dec: ", dec)
                 for a in range(size):
                     for b in range(size):
-                        mapa[i + a][j + b] = [dec * 255, dec * 255, dec * 255]
+                        bit_map[i + a][j + b] = [dec * 255, dec * 255, dec * 255]
     elapsed_time = time.time() - start_time
     print(time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
-    result_image.set_img(mapa)
+    result_image.set_img(bit_map)
     percent_labels[0].setText("Przetwarzenie: 100%")
-    checkImg(path, name[:name.index(".")], error_image, percent_labels[1], mapa)
+    check_img(path, name[:name.index(".")], error_image, percent_labels[1], errors_labels, bit_map)
 
 
-def checkImg(path, name, error_image, percent_label, image=None):
-    TP = 0
-    TN = 0
-    FP = 0
-    FN = 0
+def check_img(path, name, error_image, percent_label, errors_labels, my_map):
+    tp = 0
+    tn = 0
+    fp = 0
+    fn = 0
     original_map = cv2.imread(path + "_manualsegm/" + name + ".tif")
-    if image is None:
-        my_map = cv2.imread("mapy/" + path + "/" + name + ".jpg")
-    else:
-        my_map = image
     for i in range(len(original_map)):
         for j in range(len(original_map[0])):
             if j % 1000 == 0:
@@ -311,42 +330,40 @@ def checkImg(path, name, error_image, percent_label, image=None):
                 print(i, " ", j)
             if my_map[i][j].all() != original_map[i][j].all():
                 if original_map[i][j].all() != 0:
-                    FN += 1
+                    fn += 1
                     my_map[i][j] = [255, 0, 0]  # false negative
 
                 else:
-                    FP += 1
+                    fp += 1
                     my_map[i][j] = [0, 0, 255]  # false positive
             else:
                 if original_map[i][j].all() == 0:
-                    TN += 1  # true negative
+                    tn += 1  # true negative
                 else:
-                    TP += 1  # true positive
+                    tp += 1  # true positive
     percent_label.setText("Sprawdzenie: 100%")
-    print("Count ", TP + TN + FP + FN)
-    print("True positive: ", TP)
-    print("True negative: ", TN)
-    print("False negative: ", FN)
-    print("False positive: ", FP)
-    acc = (TP + TN) / (TP + TN + FP + FN)
+    print("Count ", tp + tn + fp + fn)
+    print("True positive: ", tp)
+    print("True negative: ", tn)
+    print("False negative: ", fn)
+    print("False positive: ", fp)
+    acc = (tp + tn) / (tp + tn + fp + fn)
+    errors_labels[0].setText("Acc: " + str(acc))
     print("Acc: ", acc)
-    sens = TP / (TP + FN)
+    sens = tp / (tp + fn)
+    errors_labels[1].setText("Sens: " + str(sens))
     print("Sens: ", sens)
-    spec = TN / (TN + FP)
+    spec = tn / (tn + fp)
     print("Spec: ", spec)
+    errors_labels[2].setText("Spec: " + str(spec))
     error_image.set_img(my_map)
-    # todo wyświetlanie błędów
 
 
-def start_ai(path, name, result_image, error_image, percent_labels):
-    data = obrazy.loadData("healthy", "_h", 10)
-    X, Y = obrazy.prepareData(data)
-    clf = obrazy.lern(X, Y)
-    ai_class(path, name, clf, result_image, error_image, percent_labels)
+def start_ai(path, name, result_image, error_image, percent_labels, error_labels, classifier, begin):
+    ai_class(path, name, classifier, result_image, error_image, percent_labels, error_labels, begin=begin)
 
 
-def ai_class(path, name, clf, result_image, error_image, percent_labels, size=5, begin=False):
-    t = 2
+def ai_class(path, name, classifier, result_image, error_image, percent_labels, error_labels, size=10, begin=False):
     kernel = np.ones((5, 5), np.uint8)
     start_time = time.time()
     img = cv2.imread(path + "/" + name, 0)
@@ -356,7 +373,7 @@ def ai_class(path, name, clf, result_image, error_image, percent_labels, size=5,
         for _ in range(2):
             a = clahe.apply(a)
         img = cv2.morphologyEx(a, cv2.MORPH_OPEN, kernel)
-    mapa = np.zeros((len(img), len(img[0]), 3))
+    bit_map = np.zeros((len(img), len(img[0]), 3))
     for i in range(0, len(img), size):
         for j in range(0, len(img[0]), size):
             if j % 1000 == 0:
@@ -364,7 +381,8 @@ def ai_class(path, name, clf, result_image, error_image, percent_labels, size=5,
                     "Przetwarzenie: " + str(int((i * len(img[0]) + j) / (len(img) * len(img[0])) * 100)) + "%")
             if i % 100 == 0 and j % 1000 == 0:
                 print(i, " ", j)
-                if j % 3000 == 0:
+                if j % 3000 == 0 and j != 0:
+                    result_image.set_img(bit_map)
                     elapsed_time = time.time() - start_time
                     print(time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
             if i + size < len(img) and j + size < len(img[0]):
@@ -379,37 +397,44 @@ def ai_class(path, name, clf, result_image, error_image, percent_labels, size=5,
                 if c == size ** 2:
                     dec = 0
                 else:
-                    X = []
+                    x = []
                     r, g, b = obrazy.average(slice)
-                    X.append(r)
-                    X.append(g)
-                    X.append(b)
-                    war = obrazy.wariancja(r, g, b, slice)
-                    X.append(war)
+                    x.append(r)
+                    x.append(g)
+                    # X.append(b)
+                    war = obrazy.variance(r, g, b, slice)
+                    x.append(war)
                     img_gray = cv2.cvtColor(slice.astype(np.uint8), cv2.COLOR_BGR2GRAY)
                     _, im = cv2.threshold(img_gray, 128, 255, cv2.THRESH_BINARY)
                     moments1 = cv2.moments(im)
-                    mom = ['m00', 'm10', 'm01', 'm20', 'm11', 'm02', 'm30', 'm21', 'm12', 'm03', 'mu20', 'mu11',
+                    hu_moments = cv2.HuMoments(moments1)
+                    """mom = ['m00', 'm10', 'm01', 'm20', 'm11', 'm02', 'm30', 'm21', 'm12', 'm03', 'mu20', 'mu11',
                            'mu02', 'mu30', 'mu21', 'mu12', 'mu03',
                            'nu20', 'nu11', 'nu02', 'nu30', 'nu21', 'nu12', 'nu03']
                     for c in mom:
-                        X.append(moments1[c])
-                    if clf.predict([X])[0] > 0:
+                        x.append(moments1[c])"""
+                    for c in hu_moments:
+                        x.append(c[0])
+                    if classifier.predict([x])[0] > 0:
                         dec = 1
                     else:
                         dec = 0
                 for a in range(size):
                     for b in range(size):
-                        mapa[i + a][j + b] = [dec * 255, dec * 255, dec * 255]
+                        bit_map[i + a][j + b] = [dec * 255, dec * 255, dec * 255]
 
     elapsed_time = time.time() - start_time
     print(time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
-    result_image.set_img(mapa)
+    result_image.set_img(bit_map)
     percent_labels[0].setText("Przetwarzenie: 100%")
-    checkImg(path, name[:name.index(".")], error_image, percent_labels[1], mapa)
+    check_img(path, name[:name.index(".")], error_image, percent_labels[1], error_labels, bit_map)
 
 
 if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        if sys.argv[1] == '0':
+            obrazy.generate_data(2000, App.size, App.begin, False)
+    clf = obrazy.get_clf()
     app = QApplication(sys.argv)
-    ex = App()
+    ex = App(clf)
     sys.exit(app.exec_())

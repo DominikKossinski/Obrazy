@@ -4,9 +4,8 @@ import time
 
 import cv2
 import numpy as np
-from math import log10, copysign
 from skimage import morphology
-import image_slicer
+from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPClassifier
 
 
@@ -14,9 +13,9 @@ def area(element):
     return cv2.contourArea(element)
 
 
-def simpleDetection(path, name):
+def simple_detection(path, file_name):
     t = 4
-    picture = cv2.imread(path + "/" + name, 0)
+    picture = cv2.imread(path + "/" + file_name, 0)
     kernel = np.ones((5, 5), np.uint8)
     a = picture
     clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(8, 8))
@@ -33,7 +32,7 @@ def simpleDetection(path, name):
 
     for i in range(1):
         a = morphology.erosion(a)
-        print("Erossion" + str(i))
+        print("Erosion" + str(i))
         cv2.imshow('image', a)
         cv2.waitKey(t)
 
@@ -44,7 +43,7 @@ def simpleDetection(path, name):
 
     for i in range(2):
         thresh = morphology.erosion(thresh)
-        print("Erossion" + str(i))
+        print("Erosion" + str(i))
         cv2.imshow('image', thresh)
         cv2.waitKey(t)
 
@@ -54,110 +53,99 @@ def simpleDetection(path, name):
         cv2.imshow('image', thresh)
         cv2.waitKey(t)
 
-    """thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-    print("Exit")
-    cv2.imshow('image', thresh)
-    cv2.waitKey(t"""
-
     thresh = cv2.bitwise_not(thresh)
     print("bitwise_not")
     cv2.imshow('image', thresh)
     cv2.waitKey(t)
     image, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    contoursTab = []
-    minArea = 100
+    contours_tab = []
+    min_area = 100
     contours = sorted(contours, key=area)
     print("Contours count: ", len(contours))
     for contour in contours:
-        # todo zmiana pola powierzchni na miare koloru
-        leftmost = tuple(contour[contour[:, :, 0].argmin()][0])
-        rightmost = tuple(contour[contour[:, :, 0].argmax()][0])
-        topmost = tuple(contour[contour[:, :, 1].argmin()][0])
-        botmost = tuple(contour[contour[:, :, 1].argmax()][0])
-        if cv2.contourArea(
-                contour) > minArea and picture[leftmost[1]][leftmost[0]].any() > 0 and picture[rightmost[1]][
-            rightmost[0]].any() > 0 and picture[topmost[1]][topmost[0]].any() > 0 and picture[botmost[1]][
-            botmost[0]].any() > 0:
-            contoursTab.append(contour)
-        else:
-            if cv2.contourArea(contour) > minArea:
-                print("L ", picture[leftmost[1]][leftmost[0]])
-                print("R ", picture[rightmost[1]][rightmost[0]])
+        left_most = tuple(contour[contour[:, :, 0].argmin()][0])
+        right_most = tuple(contour[contour[:, :, 0].argmax()][0])
+        top_most = tuple(contour[contour[:, :, 1].argmin()][0])
+        bottom_most = tuple(contour[contour[:, :, 1].argmax()][0])
+        if cv2.contourArea(contour) > min_area and picture[left_most[1]][left_most[0]].any() > 0 and \
+                picture[right_most[1]][right_most[0]].any() > 0 and picture[top_most[1]][top_most[0]].any() > 0 and \
+                picture[bottom_most[1]][bottom_most[0]].any() > 0:
+            contours_tab.append(contour)
 
-    print("Contours count: ", len(contoursTab))
-    cv2.drawContours(opening, contoursTab, -1, (255, 255, 255), 3)
-    bitmap = np.zeros((len(opening), len(opening[0])))
-    cv2.drawContours(bitmap, contoursTab, -1, (255, 255, 255), -1)
-    cv2.imwrite("wyniki/" + path + "/" + name, opening)
-    cv2.imwrite("mapy/" + path + "/" + name, bitmap)
-    cv2.imshow('image', opening)
+    print("Contours count: ", len(contours_tab))
+    cv2.drawContours(picture, contours_tab, -1, (255, 255, 255), 3)
+    bitmap = np.zeros((len(opening), len(opening[0]), 3))
+    cv2.drawContours(bitmap, contours_tab, -1, (255, 255, 255), -1)
+    try:
+        os.makedirs("maps/" + path)
+    except FileExistsError:
+        pass
+    cv2.imwrite("maps/" + path + "/" + file_name, bitmap)
+    cv2.imshow('image', picture)
     cv2.waitKey(t)
-    checkImg(path, name[:name.index(".")])
+    check_img(path, file_name[:file_name.index(".")], bitmap)
 
 
-def checkImg(path, name, image=None, classification=False, ai=False):
+def check_img(path, file_name, my_map, classification=False, ai=False):
     t = 4
-    TP = 0
-    TN = 0
-    FP = 0
-    FN = 0
-    orginalMap = cv2.imread(path + "_manualsegm/" + name + ".tif")
-    if image is None:
-        myMap = cv2.imread("mapy/" + path + "/" + name + ".jpg")
-    else:
-        myMap = image
-    for i in range(len(orginalMap)):
-        for j in range(len(orginalMap[0])):
+    tp = 0
+    tn = 0
+    fp = 0
+    fn = 0
+    original_map = cv2.imread(path + "_manualsegm/" + file_name + ".tif")
+    for i in range(len(original_map)):
+        for j in range(len(original_map[0])):
             if i % 100 == 0 and j % 1000 == 0:
                 print(i, " ", j)
-            if myMap[i][j].all() != orginalMap[i][j].all():
-                if orginalMap[i][j].all() != 0:
-                    FN += 1
-                    myMap[i][j] = [255, 0, 0]  # false negative
-
+            if my_map[i][j].all() != original_map[i][j].all():
+                if original_map[i][j].all() != 0:
+                    fn += 1
+                    my_map[i][j] = [255, 0, 0]  # false negative
                 else:
-                    FP += 1
-                    myMap[i][j] = [0, 0, 255]  # false positive
+                    fp += 1
+                    my_map[i][j] = [0, 0, 255]  # false positive
             else:
-                if orginalMap[i][j].all() == 0:
-                    TN += 1  # true negative
+                if original_map[i][j].all() == 0:
+                    tn += 1  # true negative
                 else:
-                    TP += 1  # true positive
-    # todo zapis do pliku
-    print("Count ", TP + TN + FP + FN)
-    print("True positive: ", TP)
-    print("True negative: ", TN)
-    print("False negative: ", FN)
-    print("False positive: ", FP)
-    acc = (TP + TN) / (TP + TN + FP + FN)
+                    tp += 1  # true positive
+    print("Count ", tp + tn + fp + fn)
+    print("True positive: ", tp)
+    print("True negative: ", tn)
+    print("False negative: ", fn)
+    print("False positive: ", fp)
+    acc = (tp + tn) / (tp + tn + fp + fn)
     print("Acc: ", acc)
-    sens = TP / (TP + FN)
+    sens = tp / (tp + fn)
     print("Sens: ", sens)
-    spec = TN / (TN + FP)
+    spec = tn / (tn + fp)
     print("Spec: ", spec)
-    cv2.imshow('image', myMap)
+    cv2.imshow('image', my_map)
     if classification:
         path += "_classification"
     if ai:
         path += "_ai"
     try:
-        os.makedirs("bledy/" + path)
+        os.makedirs("errors/" + path)
     except FileExistsError:
         pass
-    file = open("bledy/" + path + "/bledy.txt", "a+")
-    wr = name + ";" + str(TP) + ";" + str(TN) + ";" + str(FN) + ";" + str(FP) + ";" + str(acc) + ";" + str(sens) + ";" + str(spec) + "\n"
-    file.write(wr)
-    file.close()
-    cv2.imwrite("bledy/" + path + "/" + name + ".jpg", myMap)
+    errors_file = open("errors/" + path + "/errors.txt", "a+")
+    to_write = file_name + ";" + str(tp) + ";" + str(tn) + ";" + str(fn) + ";" + str(fp) + ";" + str(acc) + ";" + str(
+        sens) + ";" + str(spec) + "\n"
+    errors_file.write(to_write)
+    errors_file.close()
+    cv2.imwrite("errors/" + path + "/" + file_name + ".jpg", my_map)
     cv2.waitKey(t)
 
 
-def loadData(path, name, n):
+def load_data(path, file_name, n, is_knn):
     tab = []
+    if is_knn:
+        path += "_knn"
     for i in range(1, n + 1):
-        full_name = "%02d" % i + name
-        dane = open("splited/" + path + "/" + full_name + "/dane.txt")
-        print("splited/" + path + "/" + full_name + "/dane.txt")
+        full_name = "%02d" % i + file_name
+        dane = open("split/" + path + "/" + full_name + "/dane.txt")
+        print("split/" + path + "/" + full_name + "/dane.txt")
         i = 0
         for line in dane:
             if i == 0:
@@ -172,16 +160,16 @@ def loadData(path, name, n):
     return tab
 
 
-def getFirst(tab):
+def get_first(tab):
     return tab[0]
 
 
-def classify(slice, k, dane):
-    r, g, b = average(slice)
-    war = wariancja(r, g, b, slice)
-    img_gray = cv2.cvtColor(slice.astype(np.uint8), cv2.COLOR_BGR2GRAY)
+def classify(img_slice, k, dane):
+    r, g, b = average(img_slice)
+    war = variance(r, g, b, img_slice)
+    """img_gray = cv2.cvtColor(img_slice.astype(np.uint8), cv2.COLOR_BGR2GRAY)
     _, im = cv2.threshold(img_gray, 128, 255, cv2.THRESH_BINARY)
-    """moments1 = cv2.moments(im)
+    moments1 = cv2.moments(im)
     mom = ['m00', 'm10', 'm01', 'm20', 'm11', 'm02', 'm30', 'm21', 'm12', 'm03', 'mu20', 'mu11',
            'mu02', 'mu30', 'mu21', 'mu12', 'mu03',
            'nu20', 'nu11', 'nu02', 'nu30', 'nu21', 'nu12', 'nu03']
@@ -201,7 +189,7 @@ def classify(slice, k, dane):
             d += abs(moments[i] - dana[4 + i])"""
         dec = dana[-1]
         d_tab.append([d, dec])
-    d_tab = sorted(d_tab, key=getFirst)
+    d_tab = sorted(d_tab, key=get_first)
     dec_b = 0
     dec_c = 0
     for i in range(k):
@@ -215,38 +203,50 @@ def classify(slice, k, dane):
         return 0
 
 
-def average(slice):
+def average(img_slice):
     r = 0
     g = 0
     b = 0
-    for i in range(len(slice)):
-        for j in range(len(slice[0])):
-            r += slice[i][j][2]
-            g += slice[i][j][1]
-            b += slice[i][j][0]
-    r /= (len(slice) * len(slice[0]))
-    g /= (len(slice) * len(slice[0]))
-    b /= (len(slice) * len(slice[0]))
+    for i in range(len(img_slice)):
+        for j in range(len(img_slice[0])):
+            r += img_slice[i][j][2]
+            g += img_slice[i][j][1]
+            b += img_slice[i][j][0]
+    r /= (len(img_slice) * len(img_slice[0]))
+    g /= (len(img_slice) * len(img_slice[0]))
+    b /= (len(img_slice) * len(img_slice[0]))
     return r, g, b
 
 
-def wariancja(r, g, b, slice):
+def variance(r, g, b, img_slice):
     r_sum = 0
     g_sum = 0
     b_sum = 0
-    for i in range(len(slice)):
-        for j in range(len(slice[0])):
-            r_sum += (r - slice[i][j][2]) ** 2
-            g_sum += (g - slice[i][j][1]) ** 2
-            b_sum += (b - slice[i][j][0]) ** 2
-    return (r_sum + g_sum + b_sum) / (len(slice) * len(slice[0]) * 3)
+    for i in range(len(img_slice)):
+        for j in range(len(img_slice[0])):
+            r_sum += (r - img_slice[i][j][2]) ** 2
+            g_sum += (g - img_slice[i][j][1]) ** 2
+            b_sum += (b - img_slice[i][j][0]) ** 2
+    return (r_sum + g_sum + b_sum) / (len(img_slice) * len(img_slice[0]) * 3)
 
 
-def knn(path, name, n, k, size=5):
+def knn(path, file_name, n, k, begin_transform, size=5):
+    t = 4
+    kernel = np.ones((5, 5), np.uint8)
     start_time = time.time()
-    img = cv2.imread(path + "/" + name)
-    mapa = np.zeros((len(img), len(img[0]), 3))
-    dane = loadData(path, "_h", n)
+    if begin_transform:
+        img = cv2.imread(path + "/" + file_name, 0)
+    else:
+        img = cv2.imread(path + "/" + file_name)
+    if begin_transform:
+        a = img
+        clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(8, 8))
+        for _ in range(2):
+            a = clahe.apply(a)
+
+        img = cv2.morphologyEx(a, cv2.MORPH_OPEN, kernel)
+    bit_map = np.zeros((len(img), len(img[0]), 3))
+    dane = get_data(n, True)
     for i in range(0, len(img), size):
         for j in range(0, len(img[0]), size):
             if i % 100 == 0 and j % 1000 == 0:
@@ -270,68 +270,81 @@ def knn(path, name, n, k, size=5):
                 # print("Dec: ", dec)
                 for a in range(size):
                     for b in range(size):
-                        mapa[i + a][j + b] = [dec * 255, dec * 255, dec * 255]
+                        bit_map[i + a][j + b] = [dec * 255, dec * 255, dec * 255]
     elapsed_time = time.time() - start_time
     print(time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
-    cv2.imshow('image', mapa)
-    cv2.waitKey(0)
-    checkImg(path, name[:name.index(".")], mapa, True)
+    cv2.imshow('image', bit_map)
+    try:
+        os.makedirs("maps/" + path + "_classification")
+    except FileExistsError:
+        pass
+    cv2.imwrite("maps/" + path + "_classification/" + file_name, bit_map)
+    cv2.waitKey(t)
+    check_img(path, file_name[:file_name.index(".")], bit_map, classification=True)
 
 
-def splitImg(path, name, n, size=5, tabB=[], tabC=[], begin=False):
+def split_img(path, file_name, n, size=5, tab_w=None, tab_b=None, begin_transform=False, is_knn=True):
     kernel = np.ones((5, 5), np.uint8)
-    img = cv2.imread(path + "/" + name, 0)
-    if begin:
+    img = cv2.imread(path + "/" + file_name, 0)
+    if begin_transform:
         a = img
         clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(8, 8))
         for _ in range(2):
             a = clahe.apply(a)
+
         img = cv2.morphologyEx(a, cv2.MORPH_OPEN, kernel)
-    name = name[:name.index(".")]
-    mapa = cv2.imread(path + "_manualsegm/" + name + ".tif")
+    file_name = file_name[:file_name.index(".")]
+    bit_map = cv2.imread(path + "_manualsegm/" + file_name + ".tif")
     count = 0
-    biale = 0
-    czarne = 0
+    white = 0
+    black = 0
+    if is_knn:
+        path += "_knn"
     try:
-        os.makedirs("splited/" + path + "/" + name)
+        os.makedirs("split/" + path + "/" + file_name)
     except FileExistsError:
         pass
-    f = open("splited/" + path + "/" + name + "/dane.txt", "w+")
-    f.write("Lp;R;G;B;War;m0;m1;m2;m3;m4;m5;m6;m7;Dec\n")
+    f = open("split/" + path + "/" + file_name + "/dane.txt", "w+")
+    if is_knn:
+        f.write("Lp;R;G;B;War;Dec\n")
+    else:
+        f.write("Lp;R;G;War;m0;m1;m2;m3;m4;m5;Dec\n")
     print("Starting splitting")
     while count < n:
-        # todo dodawnie czegoś co się nie powtarza
         i = random.randint(0, len(img))
         j = random.randint(0, len(img[0]))
         slice = np.zeros((size, size, 3))
-        mapSlice = np.zeros((size, size, 3))
+        map_slice = np.zeros((size, size, 3))
         if i + size < len(img) and j + size < len(img[i]):
             save = False
             for a in range(size):
                 for b in range(size):
                     slice[a][b] = img[i + a][j + b]
-                    mapSlice[a][b] = mapa[i + a][j + b]
+                    map_slice[a][b] = bit_map[i + a][j + b]
                     if not save and slice[a][b][0] > 1 and slice[a][b][1] > 1 and slice[a][b][2] > 1:
-                        # print(slice[a][b])
                         save = True
             if save:
-                if mapSlice[size // 2][size // 2][0] > 0:
+                if map_slice[size // 2][size // 2][0] > 0:
                     r, g, b = average(slice)
-                    war = wariancja(r, g, b, slice)
-                    img_gray = cv2.cvtColor(slice.astype(np.uint8), cv2.COLOR_BGR2GRAY)
-                    _, im = cv2.threshold(img_gray, 128, 255, cv2.THRESH_BINARY)
-                    moments = cv2.moments(im)
-                    ##print(moments)
-                    """huMoments = cv2.HuMoments(moments)"""
-                    to_write = str(count) + ";" + str(r) + ";" + str(g) + ";" + str(b) + ";" + str(war)
-                    mom = ['m00', 'm10', 'm01', 'm20', 'm11', 'm02', 'm30', 'm21', 'm12', 'm03', 'mu20', 'mu11',
-                           'mu02', 'mu30', 'mu21', 'mu12', 'mu03',
-                           'nu20', 'nu11', 'nu02', 'nu30', 'nu21', 'nu12', 'nu03']
-                    for c in mom:
-                        to_write += ";" + str(moments[c])
-
+                    war = variance(r, g, b, slice)
+                    if is_knn:
+                        to_write = str(count) + ";" + str(r) + ";" + str(g) + ";" + str(b) + ";" + str(war)
+                    else:
+                        img_gray = cv2.cvtColor(slice.astype(np.uint8), cv2.COLOR_BGR2GRAY)
+                        _, im = cv2.threshold(img_gray, 128, 255, cv2.THRESH_BINARY)
+                        moments = cv2.moments(im)
+                        hu_moments = cv2.HuMoments(moments)
+                        to_write = str(count) + ";" + str(r) + ";" + str(g) + ";" + str(war)
+                        # to_write = str(count) + ";" + str(r) + ";" + str(g) + ";" + str(b) + ";" + str(war)
+                        """mom = ['m00', 'm10', 'm01', 'm20', 'm11', 'm02', 'm30', 'm21', 'm12', 'm03', 'mu20', 'mu11',
+                               'mu02', 'mu30', 'mu21', 'mu12', 'mu03',
+                               'nu20', 'nu11', 'nu02', 'nu30', 'nu21', 'nu12', 'nu03']
+                        for c in mom:
+                            to_write += ";" + str(moments[c])"""
+                        for c in hu_moments:
+                            to_write += ";" + str(c[0])
                     if save:
-                        biale += 1
+                        white += 1
                         to_write += ";1\n"
                         f.write(to_write)
                         count += 1
@@ -339,41 +352,48 @@ def splitImg(path, name, n, size=5, tabB=[], tabC=[], begin=False):
                     save = random.randint(0, 5) == 0
                     if save:
                         r, g, b = average(slice)
-                        war = wariancja(r, g, b, slice)
-                        img_gray = cv2.cvtColor(slice.astype(np.uint8), cv2.COLOR_BGR2GRAY)
-                        _, im = cv2.threshold(img_gray, 128, 255, cv2.THRESH_BINARY)
-                        moments = cv2.moments(im)
-                        # print(moments)
-                        """huMoments = cv2.HuMoments(moments)"""
-                        to_write = str(count) + ";" + str(r) + ";" + str(g) + ";" + str(b) + ";" + str(war)
-                        mom = ['m00', 'm10', 'm01', 'm20', 'm11', 'm02', 'm30', 'm21', 'm12', 'm03', 'mu20', 'mu11',
-                               'mu02', 'mu30', 'mu21', 'mu12', 'mu03',
-                               'nu20', 'nu11', 'nu02', 'nu30', 'nu21', 'nu12', 'nu03']
-                        for c in mom:
-                            to_write += ";" + str(moments[c])
+                        war = variance(r, g, b, slice)
+                        if is_knn:
+                            to_write = str(count) + ";" + str(r) + ";" + str(g) + ";" + str(b) + ";" + str(war)
+                        else:
+                            img_gray = cv2.cvtColor(slice.astype(np.uint8), cv2.COLOR_BGR2GRAY)
+                            _, im = cv2.threshold(img_gray, 128, 255, cv2.THRESH_BINARY)
+                            moments = cv2.moments(im)
+                            hu_moments = cv2.HuMoments(moments)
+                            to_write = str(count) + ";" + str(r) + ";" + str(g) + ";" + str(war)
+                            # to_write = str(count) + ";" + str(r) + ";" + str(g) + ";" + str(b) + ";" + str(war)
+                            """mom = ['m00', 'm10', 'm01', 'm20', 'm11', 'm02', 'm30', 'm21', 'm12', 'm03', 'mu20', 'mu11',
+                                   'mu02', 'mu30', 'mu21', 'mu12', 'mu03',
+                                   'nu20', 'nu11', 'nu02', 'nu30', 'nu21', 'nu12', 'nu03']
+                            for c in mom:
+                                to_write += ";" + str(moments[c])"""
+                            for c in hu_moments:
+                                to_write += ";" + str(c[0])
                         if save:
-                            czarne += 1
+                            black += 1
                             to_write += ";0\n"
                             f.write(to_write)
                             count += 1
                 print("i = ", i, " j = ", j, " count = ", count)
     f.close()
-    tabB.append(biale)
-    tabC.append(czarne)
+    if tab_w is not None:
+        tab_w.append(white)
+    if tab_b is not None:
+        tab_b.append(black)
 
 
-def aiClass(path, name, clf, size=5, begin=False):
+def ai_class(path, file_name, classifier, size=5, begin_transform=False):
     t = 2
     kernel = np.ones((5, 5), np.uint8)
     start_time = time.time()
-    img = cv2.imread(path + "/" + name,0)
-    if begin:
+    img = cv2.imread(path + "/" + file_name, 0)
+    if begin_transform:
         a = img
         clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(8, 8))
         for _ in range(2):
             a = clahe.apply(a)
         img = cv2.morphologyEx(a, cv2.MORPH_OPEN, kernel)
-    mapa = np.zeros((len(img), len(img[0]), 3))
+    bit_map = np.zeros((len(img), len(img[0]), 3))
     for i in range(0, len(img), size):
         for j in range(0, len(img[0]), size):
             if i % 100 == 0 and j % 1000 == 0:
@@ -388,104 +408,156 @@ def aiClass(path, name, clf, size=5, begin=False):
                     for b in range(size):
                         slice[a][b] = img[i + a][j + b]
                         if slice[a][b][0] <= 5.0 and slice[a][b][1] <= 5.0 and slice[a][b][2] <= 5.0:
-                            # print(slice[a][b])
                             c += 1
                 if c == size ** 2:
                     dec = 0
                 else:
-                    X = []
+                    x = []
                     r, g, b = average(slice)
-                    X.append(r)
-                    X.append(g)
-                    X.append(b)
-                    war = wariancja(r, g, b, slice)
-                    X.append(war)
+                    x.append(r)
+                    x.append(g)
+                    # x.append(b)
+                    war = variance(r, g, b, slice)
+                    x.append(war)
                     img_gray = cv2.cvtColor(slice.astype(np.uint8), cv2.COLOR_BGR2GRAY)
                     _, im = cv2.threshold(img_gray, 128, 255, cv2.THRESH_BINARY)
                     moments1 = cv2.moments(im)
-                    mom = ['m00', 'm10', 'm01', 'm20', 'm11', 'm02', 'm30', 'm21', 'm12', 'm03', 'mu20', 'mu11',
+                    hu_moments = cv2.HuMoments(moments1)
+                    """mom = ['m00', 'm10', 'm01', 'm20', 'm11', 'm02', 'm30', 'm21', 'm12', 'm03', 'mu20', 'mu11',
                            'mu02', 'mu30', 'mu21', 'mu12', 'mu03',
                            'nu20', 'nu11', 'nu02', 'nu30', 'nu21', 'nu12', 'nu03']
                     for c in mom:
-                        X.append(moments1[c])
-                    if clf.predict([X])[0] > 0:
+                        x.append(moments1[c])"""
+                    for c in hu_moments:
+                        x.append(c[0])
+                    if classifier.predict([x])[0] > 0:
                         dec = 1
                     else:
                         dec = 0
                 for a in range(size):
                     for b in range(size):
-                        mapa[i + a][j + b] = [dec * 255, dec * 255, dec * 255]
-
+                        bit_map[i + a][j + b] = [dec * 255, dec * 255, dec * 255]
 
     elapsed_time = time.time() - start_time
     print(time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
-    cv2.imshow('image', mapa)
+    cv2.imshow('image', bit_map)
     cv2.waitKey(t)
-    checkImg(path, name[:name.index(".")], mapa, ai=True)
+    try:
+        os.makedirs("maps/" + path + "_ai")
+    except FileExistsError:
+        pass
+    cv2.imwrite("maps/" + path + "_ai/" + file_name, bit_map)
+    check_img(path, file_name[:file_name.index(".")], bit_map, ai=True)
 
 
-def lern(X, Y):
-    clf = MLPClassifier(hidden_layer_sizes=(15,), random_state=1, max_iter=1, warm_start=True)
-    for i in range(700):
-        print("Learning", i)
-        clf.fit(X, Y)
-    return clf
+def learn(x, y, steps=15):
+    classifier = MLPClassifier(hidden_layer_sizes=(20,), activation='logistic', random_state=1, max_iter=1000,
+                               warm_start=True)
+    learning = True
+    i = 1
+    while learning:
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3, random_state=42)
+        for j in range(steps):
+            classifier.fit(x_train, y_train)
+        print("Learning", i, " ", i * steps)
+        i += 1
+        score = classifier.score(x_test, y_test)
+        print("Score:", score)
+        learning = score < 0.843
+    return classifier
 
 
-def prepareData(data):
-    X = []
-    Y = []
-    print(len(data[0]))
-    for d in data:
-        X.append(d[:-1])
-        Y.append(int(d[-1]))
-    return X, Y
+def prepare_data(all_data):
+    x = []
+    y = []
+    for d in all_data:
+        x.append(d[:-1])
+        y.append(int(d[-1]))
+    return x, y
+
+
+def get_data(n, is_knn):
+    data_1 = load_data("healthy", "_h", n, is_knn)
+    data_2 = load_data("glaucoma", "_g", n, is_knn)
+    data_3 = load_data("diabetic_retinopathy", "_dr", n, is_knn)
+    all_data = data_1 + data_2 + data_3
+    print("Data set length: ", len(all_data))
+    return all_data
+
+
+def get_clf():
+    all_data = get_data(10, False)
+    x_data, y_data = prepare_data(all_data)
+    return learn(x_data, y_data)
+
+
+def generate_data(n, size, begin_transform, is_knn):
+    tab_b = []
+    tab_c = []
+    file_names = os.listdir("healthy")
+    for file_name in file_names:
+        split_img("healthy", file_name, n, size=size, tab_w=tab_b, tab_b=tab_c, begin_transform=begin_transform, is_knn=is_knn)
+    file_names = os.listdir("glaucoma")
+    for file_name in file_names:
+        split_img("glaucoma", file_name, n, size=size, tab_w=tab_b, tab_b=tab_c, begin_transform=begin_transform, is_knn=is_knn)
+    file_names = os.listdir("diabetic_retinopathy")
+    for file_name in file_names:
+        split_img("diabetic_retinopathy", file_name, n, size=size, tab_w=tab_b, tab_b=tab_c,
+                  begin_transform=begin_transform, is_knn=is_knn)
+    print("White: ", tab_b, sum(tab_b))
+    print("Black: ", tab_c, sum(tab_c))
 
 
 if __name__ == '__main__':
+    directories = ["healthy", "glaucoma", "diabetic_retinopathy"]
+    """print(directories[-1:])
+    clf = get_clf()"""
     cv2.namedWindow('image', cv2.WINDOW_NORMAL)
-    begin  = True
-    data1 = loadData("healthy", "_h", 10)# dla 9 dobre wyniki
-    data2 = loadData("glaucoma", "_g", 10)
-    data3 = []# loadData("diabetic_retinopathy", "_dr", 7)
-    data = data1 + data2 + data3
-    print("Len of data: ", len(data))
-    X, Y = prepareData(data)
-    clf = lern(X, Y)
-    """file = open("bledy/glaucoma_ai/bledy.txt", "w+")
-    wr = "name;TP;TN;FN;FP;acc;sens;spec\n"
-    file.write(wr)
-    file.close()"""
-    names = os.listdir("glaucoma")
-    for name in names[-1:]:
-        aiClass("glaucoma", name, clf, begin=begin)
+    print("\nsimple\n")
+    for directory in directories[2:]:
+        files = os.listdir(directory)
+        try:
+            os.makedirs("errors/" + directory)
+        except FileExistsError:
+            pass
+        #errors = open("errors/" + directory + "/errors.txt", "w+")
+        #wr = "name;TP;TN;FN;FP;acc;sens;spec\n"
+        #errors.write(wr)
+        #errors.close()
+        for file in files:
+            print(file)
+            simple_detection(directory, file)
+    """
+    #todo przeliczyć dla 11
+    print("\nai\n")
+    for directory in directories[-1:]:
+        files = os.listdir(directory)
+        try:
+            os.makedirs("errors/" + directory + "_ai")
+        except FileExistsError:
+            pass
+        #errors = open("errors/" + directory + "_ai/errors.txt", "w+")
+        #wr = "name;TP;TN;FN;FP;acc;sens;spec\n"
+        #errors.write(wr)
+        #errors.close()
+        for file in files[11:11]:
+            print(file)
+            ai_class(directory, file, clf, 10, True)"""
 
-    names = os.listdir("healthy")
-    for name in names[-1:]:
-        aiClass("healthy", name, clf, begin=begin)
+    #todo zmienić klasyfikator i przeliczyć
+    """print("\nKnn\n")
+    for directory in directories:
+        files = os.listdir(directory)
+        try:
+            os.makedirs("errors/" + directory + "_classification")
+        except FileExistsError:
+            pass
+        #errors = open("errors/" + directory + "_classification/errors.txt", "w+")
+        #wr = "name;TP;TN;FN;FP;acc;sens;spec\n"
+        #errors.write(wr)
+        #errors.close()
+        for file in files[:5]:
+            print(file)
+            knn(directory, file, 1, 100, 10)"""
 
-
-    #Simple detection
-    """file = open("bledy/healthy/bledy.txt", "w+")
-    wr = "name;TP;TN;FN;FP;acc;sens;spec\n"
-    file.write(wr)
-    file.close()
-    names = os.listdir("healthy")
-    for name in names:
-        simpleDetection("healthy", name)"""
-
-    """tabB = []
-    tabC = []
-    names = os.listdir("glaucoma")
-    for name in names:
-    #todo dodac wstępne przetwarzanue ibrazu
-        splitImg("glaucoma", name, 500, tabB=tabB, tabC = tabC, begin=begin)
-    # splitImg("healthy", name, 500, tabB=tabB, tabC=tabC)
-    print("Białe: ", tabB, sum(tabB))
-    print("Czarne: ", tabC, sum(tabC))"""
-
-    #file = open("bledy/healthy_classification/bledy.txt", "w+")
-    #wr = "name;TP;TN;FN;FP;acc;sens;spec"
-    #file.write(wr)
-    #knn("healthy", names[4], 2, 100)
     cv2.destroyAllWindows()
