@@ -510,7 +510,7 @@ def generate_data(n, size, begin_transform, is_knn):
 
 if __name__ == '__main__':
     directories = ["healthy", "glaucoma", "diabetic_retinopathy"]
-    clf = get_clf()
+    #clf = get_clf()
     cv2.namedWindow('image', cv2.WINDOW_NORMAL)
     """print("\nsimple\n")
     for directory in directories[]:
@@ -527,7 +527,7 @@ if __name__ == '__main__':
             print(file)
             simple_detection(directory, file)"""
 
-    #todo przeliczyć dla [10:11] dla wszystkich folderów
+    """#todo przeliczyć ewentualnie dla 6-10
     print("\nai\n")
     for directory in directories:
         files = os.listdir(directory)
@@ -542,21 +542,21 @@ if __name__ == '__main__':
         for file in files[10:11]:
             print(file)
             ai_class(directory, file, clf, 10, True)
-
+    """
     #todo przeliczyć
-    """print("\nKnn\n")
-    for directory in directories:
+    print("\nKnn\n")
+    for directory in directories[1:]:
         files = os.listdir(directory)
         try:
             os.makedirs("errors/" + directory + "_classification")
         except FileExistsError:
             pass
-        #errors = open("errors/" + directory + "_classification/errors.txt", "w+")
-        #wr = "name;TP;TN;FN;FP;acc;sens;spec\n"
-        #errors.write(wr)
-        #errors.close()
+        errors = open("errors/" + directory + "_classification/errors.txt", "w+")
+        wr = "name;TP;TN;FN;FP;acc;sens;spec\n"
+        errors.write(wr)
+        errors.close()
         for file in files[-5:]:
             print(file)
-            knn(directory, file, 1, 100, 10)"""
+            knn(directory, file, 1, 100, 10)
 
     cv2.destroyAllWindows()
