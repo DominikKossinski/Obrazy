@@ -208,6 +208,7 @@ class MyImage(QWidget):
 
 
 def simple_detection(path, name, result_image, error_image, percent_labels, errors_labels):
+    start_time = time.time()
     picture = cv2.imread(path + "/" + name, 0)
     kernel = np.ones((5, 5), np.uint8)
     a = picture
@@ -253,7 +254,8 @@ def simple_detection(path, name, result_image, error_image, percent_labels, erro
         top_most = tuple(contour[contour[:, :, 1].argmin()][0])
         bottom_most = tuple(contour[contour[:, :, 1].argmax()][0])
         if cv2.contourArea(contour) > min_area and picture[left_most[1]][left_most[0]].any() > 0 and \
-                picture[right_most[1]][right_most[0]].any() > 0 and picture[top_most[1]][top_most[0]].any() > 0 and \
+                picture[
+                    right_most[1]][right_most[0]].any() > 0 and picture[top_most[1]][top_most[0]].any() > 0 and \
                 picture[bottom_most[1]][bottom_most[0]].any() > 0:
             contours_tab.append(contour)
 
@@ -261,6 +263,8 @@ def simple_detection(path, name, result_image, error_image, percent_labels, erro
     bitmap = np.zeros((len(opening), len(opening[0]), 3))
     cv2.drawContours(bitmap, contours_tab, -1, (255, 255, 255), -1)
     result_image.set_img(bitmap)
+    end_time = time.time() - start_time
+    print(time.strftime("%H:%M:%S", time.gmtime(end_time)))
     check_img(path, name[:name.index(".")], error_image, percent_labels[1], errors_labels, bitmap)
 
 
