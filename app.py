@@ -31,7 +31,7 @@ class App(QWidget):
         self.top = 10
 
         self.n = 1
-        self.k = 100
+        self.k = 101
 
         self.path = "healthy"
         self.name = "01_h.jpg"

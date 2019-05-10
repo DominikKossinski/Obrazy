@@ -527,7 +527,7 @@ if __name__ == '__main__':
             print(file)
             simple_detection(directory, file)"""
 
-    """#todo przeliczyć ewentualnie dla 6-10
+    """
     print("\nai\n")
     for directory in directories:
         files = os.listdir(directory)
@@ -543,7 +543,7 @@ if __name__ == '__main__':
             print(file)
             ai_class(directory, file, clf, 10, True)
     """
-    #todo przeliczyć
+    """
     print("\nKnn\n")
     for directory in directories[1:]:
         files = os.listdir(directory)
@@ -557,6 +557,6 @@ if __name__ == '__main__':
         errors.close()
         for file in files[-5:]:
             print(file)
-            knn(directory, file, 1, 100, 10)
+            knn(directory, file, 1, 101, 10)"""
 
     cv2.destroyAllWindows()
