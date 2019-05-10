@@ -59,7 +59,6 @@ class App(QWidget):
         self.buttons_widget = QWidget()
         self.buttons_layout = QVBoxLayout()
 
-        # todo setup width
         self.select_button = QPushButton("Wybierz obraz")
         self.select_button.setFont(App.font)
         self.select_button.clicked.connect(self.change_img)
