@@ -42,8 +42,8 @@ class App(QWidget):
         self.img_widget = QWidget()
 
         self.input_img = MyImage("Obraz wejściowy", "healthy/01_h.jpg", self.img_size)
-        self.result_img = MyImage("Obraz wyjściowy", "mapy/healthy/01_h.jpg", self.img_size)
-        self.error_img = MyImage("Błędy", "bledy/healthy/01_h.jpg", self.img_size)
+        self.result_img = MyImage("Obraz wyjściowy", "maps/healthy/01_h.jpg", self.img_size)
+        self.error_img = MyImage("Błędy", "errors/healthy/01_h.jpg", self.img_size)
 
         self.img_layout = QHBoxLayout()
         self.img_layout.addWidget(self.input_img)

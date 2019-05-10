@@ -456,6 +456,8 @@ def learn(x, y, steps=15):
     learning = True
     i = 1
     while learning:
+        x = x[-2000:] + x[:-2000]
+        y = y[-2000:] + y [:-2000]
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3, random_state=42)
         for j in range(steps):
             classifier.fit(x_train, y_train)
